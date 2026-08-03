@@ -3,73 +3,102 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#12141a">
+<meta name="theme-color" content="#fff3e2">
 <title>管理画面｜コメント</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;700;900&family=Zen+Kaku+Gothic+New:wght@700;900&display=swap">
+
 <style>
   :root{
-    --bg:#12141a; --panel:#1c1f27; --panel2:#242833; --ink:#eef0f4; --muted:#8d94a3;
-    --line:#313644; --accent:#e97132; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
-    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+    --bg:#fff3e2; --ink:#1d1a14; --muted:#8d8069; --muted2:#7d6f57;
+    --accent:#ff8c42; --ok:#a0e7c4; --warn:#ffd166; --err:#ffadad; --card:#fff;
+    --bd:2.5px solid var(--ink);
+    --sh:3px 3px 0 var(--ink);
+    --r:20px;
+    --f-body:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+    --f-disp:"Zen Kaku Gothic New","Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{margin:0;background:var(--bg);color:var(--ink);
-       padding:env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom))}
-  .wrap{width:100%;max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding:20px 0}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-weight:500;
+       padding:env(safe-area-inset-top) 18px calc(28px + env(safe-area-inset-bottom))}
+  .wrap{width:100%;max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:26px 0}
 
-  h1{font-size:1.05rem;margin:0;font-weight:700}
-  .sub{color:var(--muted);font-size:.78rem;line-height:1.55;margin:4px 0 0}
+  h1{font-family:var(--f-disp);font-size:1.5rem;margin:0;font-weight:900;line-height:1.3}
+  .sub{color:var(--muted2);font-size:.79rem;line-height:1.7;margin:8px 0 0;font-weight:500}
 
-  .banner{border-radius:10px;padding:10px 13px;font-size:.78rem;line-height:1.6;display:none;
-          white-space:pre-wrap;word-break:break-word}
+  .banner{border:var(--bd);border-radius:16px;box-shadow:var(--sh);
+          padding:12px 15px;font-size:.78rem;line-height:1.7;display:none;
+          white-space:pre-wrap;word-break:break-word;font-weight:700}
   .banner.show{display:block}
-  .banner.warn{background:#3a2a12;border:1px solid #6b4a1c;color:#f0c68a}
-  .banner.err {background:#3a1616;border:1px solid #7a2626;color:#f5a3a3}
-  .banner b{color:#fff}
+  .banner.warn{background:var(--warn)}
+  .banner.err {background:var(--err)}
+  .banner b{font-family:var(--f-disp);font-weight:900}
 
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
-  .card h2{font-size:.85rem;margin:0 0 10px;font-weight:700;color:var(--muted)}
+  /* ---------- カード ---------- */
+  .card{background:var(--card);border:var(--bd);border-radius:var(--r);
+        box-shadow:var(--sh);padding:17px}
+  .card h2{font-family:var(--f-disp);font-size:.9rem;margin:0 0 13px;font-weight:900}
 
-  label{display:block;font-size:.75rem;color:var(--muted);margin:0 0 4px}
+  label{display:block;font-size:.72rem;color:var(--muted2);margin:0 0 5px;font-weight:700}
   input[type=text],input[type=email],input[type=password]{
-    width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;
-    color:var(--ink);padding:10px 12px;font-size:.95rem;font-family:inherit;outline:none}
-  input:focus{border-color:var(--accent)}
-  .row{display:flex;gap:10px;flex-wrap:wrap}
+    width:100%;background:var(--bg);border:2px solid var(--ink);border-radius:14px;
+    color:var(--ink);padding:11px 13px;font-size:.95rem;font-family:inherit;font-weight:700;
+    outline:none;box-shadow:2px 2px 0 var(--ink)}
+  input:focus{background:#fffaf0}
+  input::placeholder{color:#b3a894;font-weight:500}
+  .row{display:flex;gap:11px;flex-wrap:wrap}
   .row > *{flex:1 1 180px}
 
-  button{border:0;border-radius:10px;padding:11px 14px;font-size:.9rem;font-weight:700;
-         font-family:inherit;cursor:pointer;transition:opacity .15s,transform .08s}
-  button:active{transform:scale(.98)}
-  button:disabled{opacity:.35;cursor:default}
-  .primary{background:var(--accent);color:#fff}
-  .ghost{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
-  .danger{background:#3a1616;color:#f5a3a3;border:1px solid #7a2626}
-  .stop{background:var(--err);color:#fff}
-  .resume{background:var(--ok);color:#06240f}
+  /* JS が className を丸ごと差し替える箇所があるため、各色クラスは単体で完結させます */
+  button{border:var(--bd);border-radius:14px;padding:12px 15px;font-size:.88rem;
+         font-family:var(--f-disp);font-weight:900;color:var(--ink);
+         box-shadow:var(--sh);cursor:pointer;background:var(--card);
+         transition:transform .07s,box-shadow .07s,opacity .15s}
+  button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
+  button:disabled{opacity:.4;cursor:default;transform:none;box-shadow:var(--sh)}
+  .primary{background:var(--accent)}
+  .ghost  {background:#bdb2ff}
+  .danger {background:var(--err)}
+  .stop   {background:#ff6b6b}
+  .resume {background:#4ade80}
 
-  .tabs{display:flex;gap:8px}
-  .tab{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--muted);
-       border-radius:10px;padding:10px;font-size:.85rem;font-weight:700}
-  .tab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
-  .tab .n{opacity:.75;font-weight:400}
+  /* ---------- タブ ---------- */
+  .tabs{display:flex;gap:9px}
+  .tab{flex:1;background:var(--card);border:var(--bd);border-radius:14px;
+       box-shadow:var(--sh);padding:12px 6px;font-size:.85rem;
+       font-family:var(--f-disp);font-weight:900;color:var(--ink);cursor:pointer}
+  .tab.on{background:var(--accent)}
+  .tab .n{font-variant-numeric:tabular-nums;opacity:.65}
 
-  ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-  li{background:var(--panel);border:1px solid var(--line);border-radius:12px;
-     padding:11px 13px;display:flex;gap:10px;align-items:flex-start}
-  li.hid{border-color:#6b4a1c;background:#221b12}
+  /* ---------- 一覧 ---------- */
+  ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+  li{background:var(--card);border:var(--bd);border-radius:var(--r);box-shadow:var(--sh);
+     padding:13px 15px;display:flex;gap:12px;align-items:flex-start}
+  li.hid{background:var(--warn)}      /* 保留は黄色のブロックで一目で分かるようにする */
   .body{flex:1;min-width:0}
-  .txt{font-size:.95rem;line-height:1.5;word-break:break-word;white-space:pre-wrap}
-  .txt.stamp{font-size:1.6rem;line-height:1.2}
-  .meta{color:var(--muted);font-size:.7rem;margin-top:4px;display:flex;gap:8px;flex-wrap:wrap}
-  .tag{border:1px solid var(--line);border-radius:999px;padding:1px 7px}
-  .tag.ng{border-color:#7a2626;color:#f5a3a3}
-  .acts{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
-  .acts button{padding:7px 10px;font-size:.75rem;border-radius:8px}
+  .txt{font-size:.95rem;line-height:1.55;word-break:break-word;white-space:pre-wrap;font-weight:700}
+  .txt.stamp{font-size:1.8rem;line-height:1.2}
+  .meta{color:var(--muted2);font-size:.68rem;margin-top:7px;display:flex;gap:7px;
+        flex-wrap:wrap;align-items:center;font-weight:700}
+  .tag{border:2px solid var(--ink);border-radius:999px;padding:1px 9px;background:var(--bg)}
+  .tag.ng{background:#ff6b6b}
+  .acts{display:flex;flex-direction:column;gap:7px;flex:0 0 auto}
+  .acts button{padding:8px 11px;font-size:.74rem;border-radius:11px;box-shadow:2px 2px 0 var(--ink)}
+  .acts button:active{transform:translate(2px,2px);box-shadow:0 0 0 var(--ink)}
 
-  .empty{color:var(--muted);font-size:.8rem;text-align:center;padding:26px 0}
-  .status{color:var(--muted);font-size:.78rem;min-height:1.3em}
-  .status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.err{color:var(--err)}
-  .hide{display:none}
+  .empty{color:var(--muted);font-size:.82rem;text-align:center;padding:30px 0;font-weight:700}
+  .status{color:var(--muted2);font-size:.76rem;min-height:1.3em;font-weight:700}
+  .status.ok{color:#2f8f5b} .status.warn{color:#a9761a} .status.err{color:#c93b3b}
+
+  /* 管理パネルの表示制御。
+     以前は #panel に style="display:flex" を直接書いていたため、インライン指定が
+     .hide より強く、未ログインでもパネルが見えてしまっていました。
+     指定をここへ移し、.hide には !important を付けて確実に隠します。 */
+  #panel{display:flex;flex-direction:column;gap:16px}
+  .hide{display:none !important}
 </style>
 </head>
 <body>
@@ -95,14 +124,14 @@
         <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••">
       </div>
     </div>
-    <div class="row" style="margin-top:10px">
+    <div class="row" style="margin-top:12px">
       <button class="primary" id="login">ログイン</button>
     </div>
-    <div class="status" id="loginStatus" style="margin-top:8px"></div>
+    <div class="status" id="loginStatus" style="margin-top:10px"></div>
   </div>
 
   <!-- 管理本体 -->
-  <div id="panel" class="hide" style="display:flex;flex-direction:column;gap:14px">
+  <div id="panel" class="hide">
 
     <div class="card">
       <h2>イベント</h2>
@@ -115,11 +144,11 @@
           <button class="ghost" id="switch" style="width:100%">切り替え</button>
         </div>
       </div>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top:12px">
         <button class="stop" id="pause">コメントを全体停止</button>
         <button class="ghost" id="logout" style="flex:0 0 auto">ログアウト</button>
       </div>
-      <div class="status" id="status" style="margin-top:8px"></div>
+      <div class="status" id="status" style="margin-top:10px"></div>
     </div>
 
     <div class="tabs">
@@ -370,7 +399,7 @@ function render() {
     acts.className = "acts";
 
     const toggle = document.createElement("button");
-    toggle.className = d.hidden ? "ghost" : "ghost";
+    toggle.className = d.hidden ? "resume" : "ghost";
     toggle.textContent = d.hidden ? "表示する" : "隠す";
     toggle.addEventListener("click", () => setHidden(d.id, !d.hidden));
     acts.appendChild(toggle);

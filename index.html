@@ -3,71 +3,115 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#12141a">
+<meta name="theme-color" content="#fff3e2">
 <title>コメントを送る</title>
+
+<!-- 極太の日本語サンセリフ。読み込めなくても端末のフォントで成立するようにしています -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;700;900&family=Zen+Kaku+Gothic+New:wght@700;900&display=swap">
+
 <style>
   :root{
-    --bg:#12141a; --panel:#1c1f27; --panel2:#242833; --ink:#eef0f4; --muted:#8d94a3;
-    --line:#313644; --accent:#e97132; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
-    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+    /* ---- 案4（ネオブルータリズム）の配色 ---- */
+    --bg:#fff3e2;          /* 生成りの背景 */
+    --ink:#1d1a14;         /* 枠線と文字。真っ黒より少し温かい */
+    --muted:#8d8069;       /* 補足文 */
+    --muted2:#7d6f57;
+    --accent:#ff8c42;      /* 送信ボタン */
+    --ok:#a0e7c4;
+    --warn:#ffd166;
+    --err:#ffadad;
+    --card:#fff;
+
+    --bd:2.5px solid var(--ink);
+    --sh:3px 3px 0 var(--ink);
+    --r:20px;
+
+    --f-body:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+    --f-disp:"Zen Kaku Gothic New","Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-weight:500;
        display:flex;flex-direction:column;align-items:center;
-       padding:env(safe-area-inset-top) 16px calc(16px + env(safe-area-inset-bottom))}
-  .wrap{width:100%;max-width:460px;display:flex;flex-direction:column;gap:16px;padding:20px 0}
+       padding:env(safe-area-inset-top) 18px calc(20px + env(safe-area-inset-bottom))}
+  .wrap{width:100%;max-width:460px;display:flex;flex-direction:column;gap:18px;padding:26px 0}
 
-  header{text-align:center}
-  header h1{font-size:1.05rem;margin:0 0 4px;font-weight:700}
-  header p{margin:0;color:var(--muted);font-size:.8rem;line-height:1.5}
+  /* ---------- 見出し ---------- */
+  header h1{font-family:var(--f-disp);font-size:1.5rem;font-weight:900;margin:0;
+            line-height:1.35;letter-spacing:.01em}
+  header .lead{margin:9px 0 0;color:var(--muted2);font-size:.8rem;line-height:1.7;font-weight:500}
 
-  .banner{border-radius:10px;padding:10px 13px;font-size:.78rem;line-height:1.6;display:none;
-          white-space:pre-wrap;word-break:break-word}
+  /* ---------- お知らせ欄 ---------- */
+  .banner{border:var(--bd);border-radius:16px;box-shadow:var(--sh);
+          padding:12px 14px;font-size:.78rem;line-height:1.65;display:none;
+          white-space:pre-wrap;word-break:break-word;font-weight:700}
   .banner.show{display:block}
-  .banner.warn{background:#3a2a12;border:1px solid #6b4a1c;color:#f0c68a}
-  .banner.err {background:#3a1616;border:1px solid #7a2626;color:#f5a3a3}
-  .banner b{color:#fff}
+  .banner.warn{background:var(--warn)}
+  .banner.err {background:var(--err)}
+  .banner b{font-family:var(--f-disp);font-weight:900}
 
-  .stamps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  .stamp{background:var(--panel);border:1px solid var(--line);border-radius:16px;
-         font-size:2rem;padding:14px 0;cursor:pointer;transition:transform .09s,background .15s;
-         line-height:1;color:inherit}
-  .stamp:active{transform:scale(.9);background:var(--panel2)}
-  .stamp:disabled{opacity:.35}
+  /* ---------- スタンプ ---------- */
+  .stamps{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
+  .stamp{aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+         border:var(--bd);border-radius:var(--r);box-shadow:var(--sh);
+         font-size:2.1rem;line-height:1;padding:0;cursor:pointer;color:inherit;
+         transition:transform .07s,box-shadow .07s,opacity .15s}
+  .stamp:nth-child(1){background:#ffd166}
+  .stamp:nth-child(2){background:#a0e7c4}
+  .stamp:nth-child(3){background:#ffadad}
+  .stamp:nth-child(4){background:#bdb2ff}
+  .stamp:nth-child(5){background:#9bd4ff}
+  .stamp:nth-child(6){background:#ffc6ff}
+  /* 押した瞬間に影の分だけ沈み込む。指の下で確かに反応する感じを出します */
+  .stamp:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
+  .stamp:disabled{opacity:.4;cursor:default;transform:none;box-shadow:var(--sh)}
 
-  .field{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px}
-  textarea{width:100%;background:transparent;border:0;color:var(--ink);resize:none;
-           font-size:1rem;line-height:1.55;font-family:inherit;outline:none;min-height:74px}
-  textarea::placeholder{color:#5c6373}
+  /* ---------- 入力欄 ---------- */
+  .field{background:var(--card);border:var(--bd);border-radius:var(--r);
+         box-shadow:var(--sh);padding:14px 16px}
+  textarea{width:100%;background:none;border:0;color:var(--ink);resize:none;
+           font-size:1rem;line-height:1.6;font-family:inherit;font-weight:500;
+           outline:none;min-height:78px;display:block}
+  textarea::placeholder{color:#b3a894}
   .field .foot{display:flex;justify-content:space-between;align-items:center;
-               margin-top:6px;color:var(--muted);font-size:.75rem}
-  .count.over{color:var(--warn)}
+               margin-top:8px;color:var(--muted);font-size:.7rem;font-weight:700}
+  .count{font-variant-numeric:tabular-nums}
+  .count.over{color:#d64545}
 
-  button.send{width:100%;background:var(--accent);color:#fff;border:0;border-radius:14px;
-              padding:15px;font-size:1rem;font-weight:700;font-family:inherit;
-              cursor:pointer;transition:opacity .15s,transform .09s}
-  button.send:active{transform:scale(.98)}
-  button.send:disabled{opacity:.35;cursor:default}
+  /* ---------- 送信 ---------- */
+  button.send{width:100%;background:var(--accent);color:var(--ink);
+              border:var(--bd);border-radius:var(--r);box-shadow:4px 4px 0 var(--ink);
+              padding:16px;font-family:var(--f-disp);font-size:1.05rem;font-weight:900;
+              cursor:pointer;transition:transform .07s,box-shadow .07s,opacity .15s}
+  button.send:active{transform:translate(4px,4px);box-shadow:0 0 0 var(--ink)}
+  button.send:disabled{opacity:.4;cursor:default;transform:none;box-shadow:4px 4px 0 var(--ink)}
 
-  .status{text-align:center;color:var(--muted);font-size:.78rem;min-height:1.4em;line-height:1.4}
-  .status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.err{color:var(--err)}
+  /* ---------- 状態表示 ---------- */
+  .status{text-align:center;color:var(--muted);font-size:.76rem;min-height:1.4em;
+          line-height:1.5;font-weight:700}
+  .status.ok{color:#2f8f5b} .status.warn{color:#a9761a} .status.err{color:#c93b3b}
 
-  .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);
-         background:var(--ok);color:#06240f;font-weight:700;font-size:.9rem;
-         padding:11px 22px;border-radius:999px;opacity:0;pointer-events:none;
-         transition:opacity .2s,transform .2s;z-index:10}
+  .toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,22px);
+         background:var(--ok);color:var(--ink);border:var(--bd);border-radius:999px;
+         box-shadow:4px 4px 0 var(--ink);
+         font-family:var(--f-disp);font-weight:900;font-size:.9rem;
+         padding:12px 24px;opacity:0;pointer-events:none;
+         transition:opacity .18s,transform .18s;z-index:10}
   .toast.show{opacity:1;transform:translate(-50%,0)}
 
-  footer{color:#4d5464;font-size:.7rem;text-align:center;margin-top:4px}
+  footer{color:var(--muted);font-size:.7rem;text-align:center;font-weight:700}
+  footer b{font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <header>
-    <h1 id="title">トークイベント</h1>
-    <p>スタンプはタップで即送信。<br>コメントは100文字まで、匿名で送れます。</p>
+    <h1 id="title">いま思ったこと、<br>送っちゃおう</h1>
+    <p class="lead">スタンプはタップで即送信。<br>コメントは100文字まで、匿名で送れます。</p>
   </header>
 
   <!-- 不具合の内容を画面に出す欄。開発者ツールを開かなくても原因が分かるようにしています -->
@@ -78,7 +122,7 @@
   <div class="field">
     <textarea id="text" maxlength="140" placeholder="コメントを入力…" enterkeyhint="send"></textarea>
     <div class="foot">
-      <span>Enter で送信されます</span>
+      <span>Enter で送信</span>
       <span class="count" id="count">0 / 100</span>
     </div>
   </div>
@@ -87,7 +131,7 @@
 
   <div class="status" id="status"></div>
 
-  <footer><span id="sent">0</span> 件送信しました</footer>
+  <footer><b id="sent">0</b> 件送信しました</footer>
 </div>
 
 <div class="toast" id="toast">送信しました</div>
@@ -146,7 +190,7 @@ const firebaseConfig = {
   appId:             "1:714980546124:web:945bdb85d3ed0fb29b06e9",
 };
 
-const EVENT_TITLE     = "トークイベント";              // ヘッダーに出す名前
+const EVENT_TITLE      = "いま思ったこと、<br>送っちゃおう";  // 見出し（<br> で改行できます）
 const DEFAULT_EVENT_ID = "event-2026";                 // イベントID（?e=xxx で上書き可）
 const STAMPS      = ["👏", "😂", "❤️", "🤔", "🔥", "👍"];
 const MAX_LENGTH  = 100;                               // firestore.rules と同じ値にすること
@@ -163,7 +207,7 @@ const eventId = (new URLSearchParams(location.search).get("e") || DEFAULT_EVENT_
 let db = null, fs = null, lastSentAt = 0, sentCount = 0;
 
 // ---- 画面の組み立て（Firebase より先に済ませ、通信が失敗しても操作できるようにする）----
-$("title").textContent = EVENT_TITLE;
+$("title").innerHTML = EVENT_TITLE;
 $("count").textContent = `0 / ${MAX_LENGTH}`;
 
 STAMPS.forEach((s) => {
@@ -217,6 +261,7 @@ async function submit(rawText, type) {
   if (wait > 0) { setStatus(`あと ${Math.ceil(wait / 1000)} 秒お待ちください`, "warn"); return; }
   lastSentAt = Date.now();
   lockButtons(true);
+  buzz();
 
   const hidden = NG_WORDS.some((w) => text.toLowerCase().includes(w.toLowerCase()));
 
@@ -243,6 +288,9 @@ async function submit(rawText, type) {
 }
 
 // ---- UI ヘルパー ----
+// 対応端末では、押した手応えを短い振動で返します（非対応端末では何も起きません）
+function buzz() { try { navigator.vibrate && navigator.vibrate(12); } catch {} }
+
 function lockButtons(disabled) {
   document.querySelectorAll(".stamp").forEach((b) => (b.disabled = disabled));
   const len = [...ta.value.trim()].length;
