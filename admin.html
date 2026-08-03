@@ -89,6 +89,26 @@
   .acts button{padding:8px 11px;font-size:.74rem;border-radius:11px;box-shadow:2px 2px 0 var(--ink)}
   .acts button:active{transform:translate(2px,2px);box-shadow:0 0 0 var(--ink)}
 
+  /* ---------- アンケート ---------- */
+  .pq{font-family:var(--f-disp);font-weight:900;font-size:1rem;line-height:1.5;
+      margin:0 0 12px;word-break:break-word}
+  .pstate{display:inline-block;border:2px solid var(--ink);border-radius:999px;
+          padding:2px 11px;font-family:var(--f-disp);font-weight:900;font-size:.68rem;
+          margin-bottom:10px;background:var(--ok)}
+  .pstate.closed{background:#ff6b6b}
+  .prow{margin-bottom:10px}
+  .prow:last-child{margin-bottom:0}
+  .plbl{display:flex;justify-content:space-between;gap:10px;font-size:.78rem;
+        font-weight:700;margin-bottom:4px;line-height:1.4}
+  .plbl .n{font-family:var(--f-disp);font-weight:900;
+           font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ptrack{height:18px;background:var(--bg);border:2px solid var(--ink);
+          border-radius:999px;overflow:hidden}
+  .pfill{height:100%;width:0;background:var(--accent);transition:width .4s}
+  .prow:nth-child(2) .pfill{background:#ffd166}
+  .prow:nth-child(3) .pfill{background:#a0e7c4}
+  .prow:nth-child(4) .pfill{background:#9bd4ff}
+
   .empty{color:var(--muted);font-size:.82rem;text-align:center;padding:30px 0;font-weight:700}
   .status{color:var(--muted2);font-size:.76rem;min-height:1.3em;font-weight:700}
   .status.ok{color:#2f8f5b} .status.warn{color:#a9761a} .status.err{color:#c93b3b}
@@ -106,7 +126,7 @@
 
   <div>
     <h1>管理画面</h1>
-    <p class="sub">保留コメントの確認・削除・全体停止を行います。ログインが必要です。</p>
+    <p class="sub">保留コメントの確認・削除・全体停止と、アンケートの実施を行います。ログインが必要です。</p>
   </div>
 
   <div class="banner" id="banner"></div>
@@ -149,6 +169,42 @@
         <button class="ghost" id="logout" style="flex:0 0 auto">ログアウト</button>
       </div>
       <div class="status" id="status" style="margin-top:10px"></div>
+    </div>
+
+    <!-- アンケート（発表中のリアルタイム投票） -->
+    <div class="card">
+      <h2>アンケート</h2>
+
+      <!-- 実施中：投票が作られている間だけ出ます -->
+      <div id="pollLive" class="hide">
+        <span class="pstate" id="pollState">投票受付中</span>
+        <p class="pq" id="pollLiveQ"></p>
+        <div id="pollRows"></div>
+        <p class="sub" id="pollTotal" style="margin-top:10px">0 票</p>
+        <div class="row" style="margin-top:12px">
+          <button class="stop" id="pollClose">投票を締め切る</button>
+          <button class="ghost" id="pollClear">結果を消す</button>
+        </div>
+      </div>
+
+      <!-- 作成：投票がないときだけ出ます -->
+      <div id="pollForm">
+        <label for="pq">質問</label>
+        <input type="text" id="pq" maxlength="60" placeholder="例：この話、聞いたことがありましたか">
+        <div class="row" style="margin-top:11px">
+          <div><label for="po1">選択肢1</label><input type="text" id="po1" maxlength="24" placeholder="はい"></div>
+          <div><label for="po2">選択肢2</label><input type="text" id="po2" maxlength="24" placeholder="いいえ"></div>
+        </div>
+        <div class="row" style="margin-top:11px">
+          <div><label for="po3">選択肢3（空欄可）</label><input type="text" id="po3" maxlength="24"></div>
+          <div><label for="po4">選択肢4（空欄可）</label><input type="text" id="po4" maxlength="24"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="primary" id="pollStart">作成して投票を開始</button>
+        </div>
+      </div>
+
+      <div class="status" id="pollStatus" style="margin-top:10px"></div>
     </div>
 
     <div class="tabs">
@@ -218,6 +274,10 @@ let filter = "pending";
 let docs = [];               // 直近の全コメント
 let unsubComments = null, unsubEvent = null;
 let paused = false;
+
+// ---- アンケートの状態 ----
+let pollId = null, pollOpen = false;
+let unsubPollDoc = null, unsubPollVotes = null;
 
 $("eid").value = eventId;
 
@@ -305,6 +365,12 @@ $("switch").addEventListener("click", () => {
 function unsubscribe() {
   if (unsubComments) { unsubComments(); unsubComments = null; }
   if (unsubEvent)    { unsubEvent();    unsubEvent = null; }
+  detachPoll();
+}
+
+function detachPoll() {
+  if (unsubPollDoc)   { unsubPollDoc();   unsubPollDoc = null; }
+  if (unsubPollVotes) { unsubPollVotes(); unsubPollVotes = null; }
 }
 
 function subscribe() {
@@ -330,12 +396,158 @@ function subscribe() {
   });
 
   unsubEvent = fs.onSnapshot(fs.doc(db, "events", eventId), (d) => {
-    paused = d.exists() && d.data().paused === true;
+    const v = d.exists() ? d.data() : {};
+    paused = v.paused === true;
     const b = $("pause");
     b.textContent = paused ? "停止を解除する" : "コメントを全体停止";
     b.className   = paused ? "resume" : "stop";
+    handlePoll(v.pollId || null, v.pollOpen === true);
   }, (e) => console.error(e));
 }
+
+// ===========================================================================
+//  アンケート
+//    events/{eventId}          … pollId と pollOpen を持つ（どの投票を今出すか）
+//    events/{eventId}/polls/{pollId}       … 設問と選択肢
+//    events/{eventId}/polls/{pollId}/votes … 1票につき1ドキュメント
+// ===========================================================================
+function handlePoll(id, open) {
+  if (id !== pollId) {
+    detachPoll();
+    pollId = id;
+    $("pollRows").innerHTML = "";
+    $("pollLiveQ").textContent = "";
+    $("pollTotal").textContent = "0 票";
+
+    if (id) {
+      unsubPollDoc = fs.onSnapshot(fs.doc(db, "events", eventId, "polls", id), (s) => {
+        if (!s.exists()) return;
+        const v = s.data();
+        $("pollLiveQ").textContent = String(v.question || "");
+        renderPollRows(Array.isArray(v.options) ? v.options.slice(0, 4) : []);
+      }, (e) => console.error(e));
+
+      unsubPollVotes = fs.onSnapshot(
+        fs.collection(db, "events", eventId, "polls", id, "votes"),
+        (snap) => {
+          const counts = [0, 0, 0, 0];
+          snap.forEach((doc) => {
+            const c = doc.data().choice;
+            if (Number.isInteger(c) && c >= 0 && c <= 3) counts[c]++;
+          });
+          applyCounts(counts);
+        }, (e) => console.error(e));
+    }
+  }
+
+  pollOpen = open;
+  $("pollLive").classList.toggle("hide", pollId === null);
+  $("pollForm").classList.toggle("hide", pollId !== null);
+
+  const st = $("pollState");
+  st.textContent = open ? "投票受付中" : "締め切りました";
+  st.className   = open ? "pstate" : "pstate closed";
+
+  const cl = $("pollClose");
+  cl.textContent = open ? "投票を締め切る" : "締め切り済み";
+  cl.disabled    = !open;
+}
+
+function renderPollRows(options) {
+  const wrap = $("pollRows");
+  wrap.innerHTML = "";
+  options.forEach((label) => {
+    const row = document.createElement("div");
+    row.className = "prow";
+    const lbl = document.createElement("div");
+    lbl.className = "plbl";
+    const name = document.createElement("span");
+    name.textContent = String(label);
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = "0票 0%";
+    lbl.append(name, n);
+    const track = document.createElement("div");
+    track.className = "ptrack";
+    const fill = document.createElement("div");
+    fill.className = "pfill";
+    track.appendChild(fill);
+    row.append(lbl, track);
+    wrap.appendChild(row);
+  });
+}
+
+function applyCounts(counts) {
+  const rows  = [...$("pollRows").children];
+  const total = counts.reduce((a, b) => a + b, 0);
+  $("pollTotal").textContent = `${total} 票`;
+  rows.forEach((row, i) => {
+    const c = counts[i] || 0;
+    const p = total ? Math.round(c / total * 100) : 0;
+    row.querySelector(".n").textContent = `${c}票 ${p}%`;
+    row.querySelector(".pfill").style.width = (total ? Math.max(p, 2) : 0) + "%";
+  });
+}
+
+// ---- 作成して開始 ----
+$("pollStart").addEventListener("click", async () => {
+  const question = $("pq").value.trim();
+  const options  = ["po1", "po2", "po3", "po4"]
+    .map((k) => $(k).value.trim())
+    .filter((v) => v.length > 0);
+
+  if (!question)          { setPollStatus("質問を入力してください", "warn"); return; }
+  if (options.length < 2) { setPollStatus("選択肢は2つ以上必要です", "warn"); return; }
+
+  $("pollStart").disabled = true;
+  setPollStatus("作成しています…", "");
+  try {
+    // 先に設問を作り、そのIDをイベント文書に書いて公開します
+    const ref = await fs.addDoc(fs.collection(db, "events", eventId, "polls"), {
+      question, options, createdAt: fs.serverTimestamp(),
+    });
+    await fs.setDoc(fs.doc(db, "events", eventId),
+      { pollId: ref.id, pollOpen: true }, { merge: true });
+
+    ["pq", "po1", "po2", "po3", "po4"].forEach((k) => ($(k).value = ""));
+    setPollStatus("投票を開始しました。投稿画面に選択肢が出ています。", "ok");
+  } catch (e) {
+    console.error(e);
+    setPollStatus("作成できませんでした（" + e.code + "）", "err");
+  } finally {
+    $("pollStart").disabled = false;
+  }
+});
+
+// ---- 締め切る（結果は発表画面に残したままにする）----
+$("pollClose").addEventListener("click", async () => {
+  if (!confirm("投票を締め切ります。結果は発表画面に出したままになります。よろしいですか。")) return;
+  $("pollClose").disabled = true;
+  try {
+    await fs.setDoc(fs.doc(db, "events", eventId), { pollOpen: false }, { merge: true });
+    setPollStatus("締め切りました", "warn");
+  } catch (e) {
+    console.error(e);
+    setPollStatus("変更できませんでした（" + e.code + "）", "err");
+    $("pollClose").disabled = false;
+  }
+});
+
+// ---- 結果を消す（票は残る。表示だけを下げる）----
+$("pollClear").addEventListener("click", async () => {
+  if (!confirm("発表画面から結果を消します。票の記録は残ります。よろしいですか。")) return;
+  $("pollClear").disabled = true;
+  try {
+    await fs.setDoc(fs.doc(db, "events", eventId),
+      { pollId: null, pollOpen: false }, { merge: true });
+    setPollStatus("結果を消しました。次のアンケートを作成できます。", "ok");
+  } catch (e) {
+    console.error(e);
+    setPollStatus("変更できませんでした（" + e.code + "）", "err");
+  } finally {
+    $("pollClear").disabled = false;
+  }
+});
 
 // ---- 全体停止 ----
 $("pause").addEventListener("click", async () => {
@@ -448,6 +660,11 @@ async function remove(id, text) {
 // ---- ヘルパー ----
 function setStatus(msg, kind) {
   const el = $("status");
+  el.textContent = msg;
+  el.className = "status" + (kind ? " " + kind : "");
+}
+function setPollStatus(msg, kind) {
+  const el = $("pollStatus");
   el.textContent = msg;
   el.className = "status" + (kind ? " " + kind : "");
 }

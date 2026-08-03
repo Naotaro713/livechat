@@ -53,6 +53,31 @@
   .banner.err {background:var(--err)}
   .banner b{font-family:var(--f-disp);font-weight:900}
 
+  /* ---------- アンケート（発表中のリアルタイム投票） ---------- */
+  /* 管理画面で投票が開かれている間だけ .on が付いて現れます */
+  .poll{display:none;background:var(--ok);border:var(--bd);border-radius:var(--r);
+        box-shadow:var(--sh);padding:16px}
+  .poll.on{display:block}
+  .poll .tag{display:inline-block;background:var(--ink);color:#fff;
+             border-radius:999px;padding:4px 12px;font-size:.66rem;
+             font-family:var(--f-disp);font-weight:900;letter-spacing:.06em}
+  .poll .q{margin:11px 0 13px;font-family:var(--f-disp);font-weight:900;
+           font-size:1.02rem;line-height:1.5;word-break:break-word}
+  .poll .opts{display:flex;flex-direction:column;gap:9px}
+  .poll .opts button{width:100%;text-align:left;background:var(--card);
+                     border:var(--bd);border-radius:14px;box-shadow:var(--sh);
+                     padding:13px 15px;font-family:var(--f-disp);font-weight:900;
+                     font-size:.94rem;line-height:1.45;color:var(--ink);cursor:pointer;
+                     word-break:break-word;
+                     transition:transform .07s,box-shadow .07s,opacity .15s}
+  .poll .opts button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
+  .poll .opts button:disabled{cursor:default;transform:none;box-shadow:var(--sh);opacity:.45}
+  /* 自分が選んだ選択肢だけは、締め切ったあとも濃いまま残します */
+  .poll .opts button.picked{background:var(--accent);opacity:1}
+  .poll .opts button.picked::after{content:" ✓"}
+  .poll .done{margin:12px 0 0;font-size:.74rem;font-weight:700;color:var(--muted2)}
+  .hide{display:none}
+
   /* ---------- スタンプ ---------- */
   .stamps{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
   .stamp{aspect-ratio:1;display:flex;align-items:center;justify-content:center;
@@ -116,6 +141,14 @@
 
   <!-- 不具合の内容を画面に出す欄。開発者ツールを開かなくても原因が分かるようにしています -->
   <div class="banner" id="banner"></div>
+
+  <!-- アンケート。管理画面で投票が開かれている間だけ表示されます -->
+  <section class="poll" id="poll">
+    <span class="tag">アンケート</span>
+    <p class="q" id="pollQ"></p>
+    <div class="opts" id="pollOpts"></div>
+    <p class="done hide" id="pollDone">回答を受け付けました。結果は発表画面に出ます。</p>
+  </section>
 
   <div class="stamps" id="stamps"></div>
 
@@ -205,6 +238,7 @@ const $ = (id) => document.getElementById(id);
 
 const eventId = (new URLSearchParams(location.search).get("e") || DEFAULT_EVENT_ID).trim();
 let db = null, fs = null, lastSentAt = 0, sentCount = 0;
+let pollId = null;   // いま開かれているアンケートのID（開いていなければ null）
 
 // ---- 画面の組み立て（Firebase より先に済ませ、通信が失敗しても操作できるようにする）----
 $("title").innerHTML = EVENT_TITLE;
@@ -242,6 +276,7 @@ try {
   db = fs.getFirestore(initializeApp(firebaseConfig));
   setStatus("接続しました", "ok");
   setTimeout(() => setStatus("", ""), 1500);
+  watchPoll();
 } catch (e) {
   console.error(e);
   window.showBanner(
@@ -284,6 +319,90 @@ async function submit(rawText, type) {
     }
   } finally {
     setTimeout(() => lockButtons(false), COOLDOWN_MS);
+  }
+}
+
+// ===========================================================================
+//  アンケート（発表中のリアルタイム投票）
+//
+//  読み取り量を抑えるため、参加者が購読するのは「イベント文書1件」だけです。
+//  投票が開いた瞬間に設問を1回だけ取得します（人数が増えても購読は増えません）。
+// ===========================================================================
+
+// 回答済みかどうかは端末内に記録します。別の端末やシークレット窓では防げません。
+function voteKey(id) { return `voted:${eventId}:${id}`; }
+
+function watchPoll() {
+  fs.onSnapshot(fs.doc(db, "events", eventId), async (d) => {
+    const v  = d.exists() ? d.data() : {};
+    const id = v.pollOpen === true ? (v.pollId || null) : null;
+    if (id === pollId) return;          // 変化がなければ何もしない
+    pollId = id;
+
+    if (!id) { $("poll").classList.remove("on"); return; }
+
+    try {
+      const snap = await fs.getDoc(fs.doc(db, "events", eventId, "polls", id));
+      if (snap.exists()) renderPoll(id, snap.data());
+    } catch (e) { console.error(e); }
+  }, (e) => console.error(e));
+}
+
+function renderPoll(id, data) {
+  const opts = Array.isArray(data.options) ? data.options.slice(0, 4) : [];
+  if (opts.length < 2) return;
+
+  $("pollQ").textContent = String(data.question || "");
+  const wrap = $("pollOpts");
+  wrap.innerHTML = "";
+
+  // 端末に記録が残っていれば、その選択肢を選んだ状態で復元します
+  let voted = null;
+  try {
+    const raw = localStorage.getItem(voteKey(id));
+    if (raw !== null) voted = Number(raw);
+  } catch {}
+
+  opts.forEach((label, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = String(label);
+    if (voted !== null) {
+      b.disabled = true;
+      if (i === voted) b.classList.add("picked");
+    }
+    b.addEventListener("click", () => vote(id, i, wrap));
+    wrap.appendChild(b);
+  });
+
+  $("pollDone").classList.toggle("hide", voted === null);
+  $("poll").classList.add("on");
+}
+
+async function vote(id, choice, wrap) {
+  if (!db) { setStatus("接続されていないため投票できません", "err"); return; }
+  try { if (localStorage.getItem(voteKey(id)) !== null) return; } catch {}
+
+  // 先に画面をロックし、二重送信を防ぎます（失敗したら下で戻します）
+  try { localStorage.setItem(voteKey(id), String(choice)); } catch {}
+  [...wrap.children].forEach((b, i) => {
+    b.disabled = true;
+    if (i === choice) b.classList.add("picked");
+  });
+  buzz();
+
+  try {
+    await fs.addDoc(
+      fs.collection(db, "events", eventId, "polls", id, "votes"),
+      { choice, createdAt: fs.serverTimestamp() }
+    );
+    $("pollDone").classList.remove("hide");
+    toast("回答しました");
+  } catch (e) {
+    console.error(e);
+    try { localStorage.removeItem(voteKey(id)); } catch {}
+    [...wrap.children].forEach((b) => { b.disabled = false; b.classList.remove("picked"); });
+    setStatus("回答を送信できませんでした。もう一度お試しください。", "err");
   }
 }
 

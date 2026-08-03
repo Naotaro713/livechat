@@ -98,6 +98,39 @@
             -webkit-text-stroke:0;text-shadow:none;
             filter:drop-shadow(3px 3px 0 #1d1a14) drop-shadow(-2px -2px 0 #1d1a14)}
 
+  /* ================= アンケートの集計パネル =================
+     スライドの右上に重ねる。弾幕（z-index:5）より手前に置いて隠れないようにします。 */
+  #pollbox{position:absolute;top:2.5vh;right:2vw;z-index:8;
+           width:min(30vw,420px);min-width:270px;
+           background:var(--bg);border:var(--bd);border-radius:var(--r);
+           box-shadow:5px 5px 0 var(--ink);padding:16px 17px;
+           display:none;transition:opacity .2s}
+  #pollbox.on{display:block}
+  #pollbox .head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  #pollbox .tag{background:var(--ink);color:#fff;border-radius:999px;padding:3px 11px;
+                font-family:var(--f-disp);font-weight:900;font-size:.66rem;letter-spacing:.06em}
+  #pollbox .tag.closed{background:#ff6b6b;color:var(--ink);border:2px solid var(--ink)}
+  #pollbox .total{margin-left:auto;font-family:var(--f-disp);font-weight:900;
+                  font-size:.76rem;font-variant-numeric:tabular-nums}
+  #pollbox .q{font-family:var(--f-disp);font-weight:900;font-size:1.02rem;
+              line-height:1.45;margin:0 0 13px;word-break:break-word}
+  #pollbox .row{margin-bottom:11px}
+  #pollbox .row:last-child{margin-bottom:0}
+  #pollbox .lbl{display:flex;justify-content:space-between;gap:10px;
+                font-weight:700;font-size:.8rem;line-height:1.4;margin-bottom:5px}
+  #pollbox .lbl .n{font-family:var(--f-disp);font-weight:900;
+                   font-variant-numeric:tabular-nums;white-space:nowrap}
+  #pollbox .track{height:22px;background:var(--card);border:2.5px solid var(--ink);
+                  border-radius:999px;overflow:hidden}
+  /* 幅の変化に時間をかけることで、票が入った瞬間が目で追えます */
+  #pollbox .fill{height:100%;width:0;background:var(--accent);
+                 border-right:2.5px solid var(--ink);
+                 transition:width .5s cubic-bezier(.22,1,.36,1)}
+  #pollbox .row:nth-child(2) .fill{background:#ffd166}
+  #pollbox .row:nth-child(3) .fill{background:#a0e7c4}
+  #pollbox .row:nth-child(4) .fill{background:#9bd4ff}
+  #pollbox .row:nth-child(5) .fill{background:#bdb2ff}
+
   /* 操作バー：マウスを動かしたときだけ出る */
   #bar{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:20;
        background:var(--bg);border:var(--bd);border-radius:999px;box-shadow:4px 4px 0 var(--ink);
@@ -160,6 +193,7 @@
     <div class="keys">
       <kbd>→</kbd> <kbd>Space</kbd> 次のページ　/　<kbd>←</kbd> 前のページ<br>
       <kbd>F</kbd> 全画面の切り替え　/　<kbd>C</kbd> コメント表示の ON・OFF<br>
+      <kbd>P</kbd> アンケート集計の表示・非表示<br>
       <kbd>D</kbd> テスト用のダミーコメントを流す　/　<kbd>Esc</kbd> 全画面を抜ける<br>
       市販のプレゼンリモコンは <kbd>→</kbd><kbd>←</kbd> を送るので、そのまま使えます。
     </div>
@@ -170,6 +204,16 @@
 <div id="stage">
   <canvas id="canvas"></canvas>
   <div id="layer"></div>
+
+  <!-- アンケートの集計。管理画面で投票が始まると現れます -->
+  <div id="pollbox">
+    <div class="head">
+      <span class="tag" id="pollTag">投票受付中</span>
+      <span class="total" id="pollTotal">0 票</span>
+    </div>
+    <p class="q" id="pollQ"></p>
+    <div id="pollRows"></div>
+  </div>
 </div>
 
 <div id="dot" title="接続状態"></div>
@@ -243,6 +287,14 @@ let db = null, fs = null, unsub = [], lanesFreeAt = new Array(LANES).fill(0);
 //   paused   … 管理画面からかかる全体停止（こちらが優先）
 let manualOn = true, paused = false;
 let onScreen = 0, startedAt = Date.now(), colorIdx = 0;
+
+// ---- アンケートの状態 ----
+//   pollId     … 表示中のアンケートのID（管理画面が「結果を消す」と null に戻る）
+//   pollOpen   … 受付中かどうか。締め切っても結果は出したままにする
+//   pollHidden … 発表者が P キーで一時的に隠しているかどうか
+let curEventId = DEFAULT_EVENT_ID;
+let pollId = null, pollOpen = false, pollHidden = false;
+let pollUnsubDoc = null, pollUnsubVotes = null;
 
 // ---------- PDF.js を読み込む（1つ目が失敗したら2つ目を試す） ----------
 for (const src of PDF_SOURCES) {
@@ -368,6 +420,7 @@ window.addEventListener("resize", () => {
 function subscribe(eventId) {
   if (!db) return;
   unsub.forEach(u => u()); unsub = [];
+  curEventId = eventId;
 
   // 直近30件を新しい順で購読する（単一フィールドの並べ替えなので索引の追加は不要）
   const q = fs.query(
@@ -395,12 +448,104 @@ function subscribe(eventId) {
     }
   }));
 
-  // 一時停止フラグ（管理画面から切り替わる）
+  // 一時停止フラグとアンケートの状態（どちらも管理画面から切り替わる）
   unsub.push(fs.onSnapshot(fs.doc(db, "events", eventId), (d) => {
-    paused = d.exists() && d.data().paused === true;
+    const v = d.exists() ? d.data() : {};
+    paused = v.paused === true;
     $("paused").classList.toggle("on", paused);
     applyCommentState();
+    handlePoll(v.pollId || null, v.pollOpen === true);
   }));
+}
+
+// ===========================================================================
+//  アンケートの集計表示
+//  管理画面が「締め切る」を押しても結果は消しません。登壇者がその場で
+//  結果に触れられるようにするためで、消すのは「結果を消す」を押したときだけです。
+// ===========================================================================
+function handlePoll(id, open) {
+  if (id !== pollId) {
+    if (pollUnsubDoc)   { pollUnsubDoc();   pollUnsubDoc = null; }
+    if (pollUnsubVotes) { pollUnsubVotes(); pollUnsubVotes = null; }
+    pollId = id;
+    $("pollRows").innerHTML = "";
+    $("pollQ").textContent = "";
+    $("pollTotal").textContent = "0 票";
+
+    if (!id) { applyPollBox(); return; }
+
+    // 設問（管理画面で文言を直したときも追従します）
+    pollUnsubDoc = fs.onSnapshot(fs.doc(db, "events", curEventId, "polls", id), (s) => {
+      if (!s.exists()) return;
+      const v = s.data();
+      $("pollQ").textContent = String(v.question || "");
+      renderPollRows(Array.isArray(v.options) ? v.options.slice(0, 4) : []);
+    }, (e) => console.error(e));
+
+    // 票（1票=1ドキュメント。入るたびに数え直します）
+    pollUnsubVotes = fs.onSnapshot(
+      fs.collection(db, "events", curEventId, "polls", id, "votes"),
+      (snap) => {
+        const counts = [0, 0, 0, 0];
+        snap.forEach((doc) => {
+          const c = doc.data().choice;
+          if (Number.isInteger(c) && c >= 0 && c <= 3) counts[c]++;
+        });
+        applyCounts(counts);
+      }, (e) => console.error(e));
+  }
+
+  pollOpen = open;
+  const tag = $("pollTag");
+  tag.textContent = open ? "投票受付中" : "締め切りました";
+  tag.className   = open ? "tag" : "tag closed";
+  applyPollBox();
+}
+
+function applyPollBox() {
+  $("pollbox").classList.toggle("on", pollId !== null && !pollHidden);
+}
+
+function togglePoll() {
+  pollHidden = !pollHidden;
+  applyPollBox();
+}
+
+function renderPollRows(options) {
+  const wrap = $("pollRows");
+  wrap.innerHTML = "";
+  options.forEach((label) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    const lbl = document.createElement("div");
+    lbl.className = "lbl";
+    const name = document.createElement("span");
+    name.textContent = String(label);
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = "0票 0%";
+    lbl.append(name, n);
+    const track = document.createElement("div");
+    track.className = "track";
+    const fill = document.createElement("div");
+    fill.className = "fill";
+    track.appendChild(fill);
+    row.append(lbl, track);
+    wrap.appendChild(row);
+  });
+}
+
+function applyCounts(counts) {
+  const rows  = [...$("pollRows").children];
+  const total = counts.reduce((a, b) => a + b, 0);
+  $("pollTotal").textContent = `${total} 票`;
+  rows.forEach((row, i) => {
+    const c = counts[i] || 0;
+    const p = total ? Math.round(c / total * 100) : 0;
+    row.querySelector(".n").textContent = `${c}票 ${p}%`;
+    // 0票のときも枠が見えるよう、わずかに幅を残します
+    row.querySelector(".fill").style.width = (total ? Math.max(p, 2) : 0) + "%";
+  });
 }
 
 // 実際に流すかどうか。全体停止が手元のスイッチより優先される。
@@ -469,6 +614,7 @@ document.addEventListener("keydown", (e) => {
       e.preventDefault(); go(-1); break;
     case "f": case "F": goFullscreen(); break;
     case "c": case "C": toggleComments(); break;
+    case "p": case "P": togglePoll(); break;
     case "d": case "D": demoBurst(); break;
     case "Home": pageNo = 1; renderPage(1); break;
     case "End":  pageNo = pdfDoc.numPages; renderPage(pageNo); break;
