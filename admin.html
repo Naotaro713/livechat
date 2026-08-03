@@ -185,6 +185,9 @@
           <button class="stop" id="pollClose">投票を締め切る</button>
           <button class="ghost" id="pollClear">結果を消す</button>
         </div>
+        <div class="row" style="margin-top:9px">
+          <button id="pollNew">次の質問を作る</button>
+        </div>
       </div>
 
       <!-- 作成：投票がないときだけ出ます -->
@@ -278,6 +281,8 @@ let paused = false;
 // ---- アンケートの状態 ----
 let pollId = null, pollOpen = false;
 let unsubPollDoc = null, unsubPollVotes = null;
+// 実施中でも「次の質問を作る」を押せば作成欄を開ける。そのときだけ true にする。
+let pollFormForced = false;
 
 $("eid").value = eventId;
 
@@ -441,8 +446,10 @@ function handlePoll(id, open) {
   }
 
   pollOpen = open;
+  if (pollId === null) pollFormForced = false;
   $("pollLive").classList.toggle("hide", pollId === null);
-  $("pollForm").classList.toggle("hide", pollId !== null);
+  $("pollForm").classList.toggle("hide", pollId !== null && !pollFormForced);
+  $("pollStart").textContent = pollId !== null ? "この質問に差し替える" : "作成して投票を開始";
 
   const st = $("pollState");
   st.textContent = open ? "投票受付中" : "締め切りました";
@@ -489,6 +496,15 @@ function applyCounts(counts) {
   });
 }
 
+// ---- 次の質問を作る（実施中でも作成欄を開く）----
+$("pollNew").addEventListener("click", () => {
+  pollFormForced = true;
+  $("pollForm").classList.remove("hide");
+  $("pollStart").textContent = "この質問に差し替える";
+  setPollStatus("差し替えると、いまの結果は発表画面から消えます（票の記録は残ります）。", "warn");
+  $("pq").focus();
+});
+
 // ---- 作成して開始 ----
 $("pollStart").addEventListener("click", async () => {
   const question = $("pq").value.trim();
@@ -510,6 +526,8 @@ $("pollStart").addEventListener("click", async () => {
       { pollId: ref.id, pollOpen: true }, { merge: true });
 
     ["pq", "po1", "po2", "po3", "po4"].forEach((k) => ($(k).value = ""));
+    pollFormForced = false;
+    $("pollForm").classList.add("hide");
     setPollStatus("投票を開始しました。投稿画面に選択肢が出ています。", "ok");
   } catch (e) {
     console.error(e);
