@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>発表画面</title>
+<style>
+  :root{
+    --bg:#0b0d11; --panel:#171a21; --panel2:#20242e; --ink:#eef0f4; --muted:#8d94a3;
+    --line:#2c313d; --accent:#e97132; --ok:#22c55e; --err:#ef4444;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:#000;color:var(--ink);overflow:hidden}
+
+  /* ---------- 開始画面 ---------- */
+  #setup{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;
+         justify-content:center;padding:24px;z-index:50;overflow:auto}
+  #setup .box{width:100%;max-width:520px;display:flex;flex-direction:column;gap:18px}
+  #setup h1{font-size:1.2rem;margin:0}
+  #setup p.lead{margin:0;color:var(--muted);font-size:.87rem;line-height:1.7}
+
+  .drop{border:2px dashed var(--line);border-radius:16px;padding:38px 20px;text-align:center;
+        background:var(--panel);cursor:pointer;transition:border-color .15s,background .15s}
+  .drop:hover,.drop.over{border-color:var(--accent);background:var(--panel2)}
+  .drop .big{font-size:1.02rem;font-weight:700;margin-bottom:6px}
+  .drop .sub{color:var(--muted);font-size:.8rem;line-height:1.6}
+
+  .rowline{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:.82rem}
+  .rowline input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:9px;
+                 color:var(--ink);padding:9px 11px;font-size:.9rem;font-family:inherit}
+
+  button.primary{background:var(--accent);color:#fff;border:0;border-radius:12px;padding:14px;
+                 font-size:1rem;font-weight:700;font-family:inherit;cursor:pointer}
+  button.primary:disabled{opacity:.35;cursor:default}
+  button.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+               border-radius:10px;padding:9px 14px;font-size:.85rem;font-family:inherit;cursor:pointer}
+
+  .banner{border-radius:10px;padding:11px 14px;font-size:.8rem;line-height:1.7;display:none;
+          white-space:pre-wrap;word-break:break-word}
+  .banner.show{display:block}
+  .banner.warn{background:#3a2a12;border:1px solid #6b4a1c;color:#f0c68a}
+  .banner.err {background:#3a1616;border:1px solid #7a2626;color:#f5a3a3}
+  .banner b{color:#fff}
+
+  .keys{color:#59606f;font-size:.76rem;line-height:1.9}
+  .keys kbd{background:var(--panel2);border:1px solid var(--line);border-radius:5px;
+            padding:1px 6px;font-family:inherit;font-size:.9em;color:var(--ink)}
+
+  /* ---------- 発表画面 ---------- */
+  #stage{position:fixed;inset:0;display:none;background:#000}
+  #stage.on{display:block}
+  #canvas{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+          max-width:100%;max-height:100%;display:block}
+
+  /* コメント層：スライドの上に重ねる。クリックは透過させる */
+  #layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:5}
+  .cm{position:absolute;left:100%;white-space:nowrap;font-weight:700;
+      color:#fff;text-shadow:0 2px 5px rgba(0,0,0,.9),0 0 2px rgba(0,0,0,.9);
+      will-change:transform;font-size:var(--cmsize,38px);line-height:1.1}
+  .cm.stamp{font-size:calc(var(--cmsize,38px) * 1.7);text-shadow:0 3px 10px rgba(0,0,0,.6)}
+
+  /* 操作バー：マウスを動かしたときだけ出る */
+  #bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:20;
+       background:rgba(18,20,26,.92);border:1px solid var(--line);border-radius:999px;
+       padding:8px 14px;display:flex;gap:12px;align-items:center;font-size:.82rem;
+       opacity:0;transition:opacity .25s;pointer-events:none}
+  #bar.show{opacity:1;pointer-events:auto}
+  #bar button{background:transparent;border:0;color:var(--ink);font-size:.95rem;cursor:pointer;
+              padding:3px 8px;border-radius:7px;font-family:inherit}
+  #bar button:hover{background:var(--panel2)}
+  #bar .sep{width:1px;height:16px;background:var(--line)}
+  #page{color:var(--muted);font-variant-numeric:tabular-nums;min-width:66px;text-align:center}
+
+  /* 接続インジケータ */
+  #dot{position:fixed;right:12px;top:12px;width:9px;height:9px;border-radius:50%;
+       background:var(--err);z-index:20;opacity:.5;transition:background .3s}
+  #dot.ok{background:var(--ok)}
+
+  #paused{position:fixed;inset:auto 0 0 0;background:rgba(239,68,68,.92);color:#fff;
+          text-align:center;padding:7px;font-size:.85rem;font-weight:700;z-index:30;display:none}
+  #paused.on{display:block}
+
+  body.hidecursor,body.hidecursor *{cursor:none}
+</style>
+</head>
+<body>
+
+<!-- ===================== 開始画面 ===================== -->
+<div id="setup">
+  <div class="box">
+    <h1>発表画面</h1>
+    <p class="lead">
+      PowerPoint を PDF で書き出したファイルを読み込みます。<br>
+      PDF はこの端末の中だけで処理され、どこにも送信されません。
+    </p>
+
+    <div class="banner" id="banner"></div>
+
+    <div class="drop" id="drop">
+      <div class="big">PDF を選ぶ</div>
+      <div class="sub">クリックして選択、またはここにドラッグ＆ドロップ</div>
+      <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+    </div>
+
+    <div class="rowline">
+      <span>イベントID</span>
+      <input id="eid" value="event-2026">
+      <button class="ghost" id="testbtn" type="button">表示テスト</button>
+    </div>
+
+    <button class="primary" id="start" disabled>発表を開始（全画面）</button>
+
+    <div class="keys">
+      <kbd>→</kbd> <kbd>Space</kbd> 次のページ　/　<kbd>←</kbd> 前のページ<br>
+      <kbd>F</kbd> 全画面の切り替え　/　<kbd>C</kbd> コメント表示の ON・OFF<br>
+      <kbd>D</kbd> テスト用のダミーコメントを流す　/　<kbd>Esc</kbd> 全画面を抜ける<br>
+      市販のプレゼンリモコンは <kbd>→</kbd><kbd>←</kbd> を送るので、そのまま使えます。
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 発表画面 ===================== -->
+<div id="stage">
+  <canvas id="canvas"></canvas>
+  <div id="layer"></div>
+</div>
+
+<div id="dot" title="接続状態"></div>
+<div id="paused">コメントを一時停止しています</div>
+
+<div id="bar">
+  <button id="prev" title="前のページ">◀</button>
+  <span id="page">– / –</span>
+  <button id="next" title="次のページ">▶</button>
+  <span class="sep"></span>
+  <button id="togglecm" title="コメント表示">💬 ON</button>
+  <button id="fs" title="全画面">⛶</button>
+  <button id="quit" title="終了">✕</button>
+</div>
+
+
+<!-- 自己診断（通常スクリプト。モジュールが動かなくても実行される） -->
+<script>
+  window.__appReady = false;
+  window.showBanner = function (msg, kind) {
+    var el = document.getElementById("banner");
+    el.innerHTML = msg;
+    el.className = "banner show " + (kind || "warn");
+  };
+  setTimeout(function () {
+    if (window.__appReady) return;
+    window.showBanner(
+      "<b>アプリが起動していません</b>\n" +
+      (location.protocol === "file:"
+        ? "ファイルを直接開いた場合、ブラウザの制限で止まることがあります。\n" +
+          "このフォルダで python3 -m http.server 8000 を実行し、http://localhost:8000/present.html を開いてください。"
+        : "ネットワークから部品を読み込めていない可能性があります。通信を確認して再読み込みしてください。"),
+      "err");
+  }, 4000);
+</script>
+
+
+<script type="module">
+// ===========================================================================
+//  設定
+// ===========================================================================
+const firebaseConfig = {
+  apiKey:            "AIzaSyAsIx7fO1mifb2kcC4sjzMCYZGWqx4FgpE",
+  authDomain:        "live-chat-1eebe.firebaseapp.com",
+  projectId:         "live-chat-1eebe",
+  storageBucket:     "live-chat-1eebe.firebasestorage.app",
+  messagingSenderId: "714980546124",
+  appId:             "1:714980546124:web:945bdb85d3ed0fb29b06e9",
+};
+
+const DEFAULT_EVENT_ID = "event-2026";
+const FLOW_SEC   = 9;    // コメントが画面を横切る秒数（小さいほど速い）
+const LANES      = 8;    // コメントの行数
+const MAX_ON_SCREEN = 20; // 同時に表示する最大数。超えた分は捨てる
+const FONT_RATIO = 0.042; // 画面高さに対する文字サイズの比率
+
+const FB  = "https://www.gstatic.com/firebasejs/12.17.0";
+const PDF_SOURCES = [
+  { lib:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.mjs",
+    wk :"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.mjs" },
+  { lib:"https://cdn.jsdelivr.net/npm/pdfjs-dist@5/build/pdf.min.mjs",
+    wk :"https://cdn.jsdelivr.net/npm/pdfjs-dist@5/build/pdf.worker.min.mjs" },
+];
+
+// ===========================================================================
+const $ = (id) => document.getElementById(id);
+let pdfjs = null, pdfDoc = null, pageNo = 1, rendering = false, pendingPage = null;
+let db = null, fs = null, unsub = [], lanesFreeAt = new Array(LANES).fill(0);
+// コメント表示の状態は2つに分ける。
+//   manualOn … 発表者が C キーで切り替える手元のスイッチ
+//   paused   … 管理画面からかかる全体停止（こちらが優先）
+let manualOn = true, paused = false;
+let onScreen = 0, startedAt = Date.now();
+
+// ---------- PDF.js を読み込む（1つ目が失敗したら2つ目を試す） ----------
+for (const src of PDF_SOURCES) {
+  try {
+    pdfjs = await import(src.lib);
+    pdfjs.GlobalWorkerOptions.workerSrc = src.wk;
+    break;
+  } catch (e) { console.warn("PDF.js の読み込みに失敗:", src.lib, e); }
+}
+if (!pdfjs) {
+  window.showBanner("<b>PDF 表示部品を読み込めませんでした</b>\n通信環境を確認して再読み込みしてください。", "err");
+}
+window.__appReady = true;
+
+// ---------- Firebase ----------
+try {
+  const { initializeApp } = await import(`${FB}/firebase-app.js`);
+  fs = await import(`${FB}/firebase-firestore.js`);
+  db = fs.getFirestore(initializeApp(firebaseConfig));
+  $("dot").classList.add("ok");
+} catch (e) {
+  console.error(e);
+  window.showBanner("<b>Firebase に接続できませんでした</b>\n" + e.message +
+    "\nスライドの表示だけは可能です。", "err");
+}
+
+// ===========================================================================
+//  PDF の読み込み
+// ===========================================================================
+$("drop").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", (e) => e.target.files[0] && loadPdf(e.target.files[0]));
+
+["dragenter","dragover"].forEach(ev =>
+  $("drop").addEventListener(ev, (e) => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave","drop"].forEach(ev =>
+  $("drop").addEventListener(ev, (e) => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", (e) => {
+  const f = e.dataTransfer.files[0];
+  if (f && f.type === "application/pdf") loadPdf(f);
+  else window.showBanner("PDF ファイルを選んでください。", "warn");
+});
+
+async function loadPdf(file) {
+  if (!pdfjs) return;
+  try {
+    const buf = await file.arrayBuffer();          // ← 端末内で読むだけ。送信しない
+    pdfDoc = await pdfjs.getDocument({ data: buf }).promise;
+    pageNo = 1;
+    $("drop").querySelector(".big").textContent = `✓ ${file.name}`;
+    $("drop").querySelector(".sub").textContent = `全 ${pdfDoc.numPages} ページ　（別のPDFに変えるにはもう一度クリック）`;
+    $("start").disabled = false;
+    $("banner").className = "banner";
+  } catch (e) {
+    console.error(e);
+    window.showBanner("<b>PDF を開けませんでした</b>\n" + e.message, "err");
+  }
+}
+
+// ===========================================================================
+//  発表開始
+// ===========================================================================
+$("start").addEventListener("click", start);
+$("testbtn").addEventListener("click", () => { demoBurst(); });
+
+async function start() {
+  if (!pdfDoc) return;
+  $("setup").style.display = "none";
+  $("stage").classList.add("on");
+  startedAt = Date.now();
+
+  await goFullscreen();
+  await renderPage(pageNo);
+  subscribe($("eid").value.trim() || DEFAULT_EVENT_ID);
+  keepAwake();
+  showBar();
+}
+
+// ---------- ページ描画 ----------
+async function renderPage(n) {
+  if (!pdfDoc) return;
+  if (rendering) { pendingPage = n; return; }
+  rendering = true;
+
+  const page = await pdfDoc.getPage(n);
+  const cv = $("canvas"), ctx = cv.getContext("2d", { alpha:false });
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  // 画面に収まる最大倍率を求める
+  const base = page.getViewport({ scale: 1 });
+  const scale = Math.min(window.innerWidth / base.width, window.innerHeight / base.height);
+  const vp = page.getViewport({ scale: scale * dpr });
+
+  cv.width  = Math.floor(vp.width);
+  cv.height = Math.floor(vp.height);
+  cv.style.width  = Math.floor(vp.width  / dpr) + "px";
+  cv.style.height = Math.floor(vp.height / dpr) + "px";
+
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+  $("page").textContent = `${n} / ${pdfDoc.numPages}`;
+  document.documentElement.style.setProperty("--cmsize",
+    Math.round(window.innerHeight * FONT_RATIO) + "px");
+
+  rendering = false;
+  if (pendingPage !== null) { const p = pendingPage; pendingPage = null; renderPage(p); }
+}
+
+function go(delta) {
+  if (!pdfDoc) return;
+  const n = Math.min(Math.max(pageNo + delta, 1), pdfDoc.numPages);
+  if (n !== pageNo) { pageNo = n; renderPage(n); }
+}
+
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => renderPage(pageNo), 150);
+});
+
+// ===========================================================================
+//  コメントの受信と描画
+// ===========================================================================
+function subscribe(eventId) {
+  if (!db) return;
+  unsub.forEach(u => u()); unsub = [];
+
+  // 直近30件を新しい順で購読する（単一フィールドの並べ替えなので索引の追加は不要）
+  const q = fs.query(
+    fs.collection(db, "events", eventId, "comments"),
+    fs.orderBy("createdAt", "desc"),
+    fs.limit(30)
+  );
+
+  unsub.push(fs.onSnapshot(q, (snap) => {
+    $("dot").classList.add("ok");
+    snap.docChanges().forEach((ch) => {
+      if (ch.type !== "added") return;
+      const d = ch.doc.data();
+      if (d.hidden) return;
+      // 開始前に投稿された古いコメントは流さない
+      const t = d.createdAt?.toMillis?.() ?? Date.now();
+      if (t < startedAt - 3000) return;
+      push(d.text, d.type);
+    });
+  }, (err) => {
+    console.error(err);
+    $("dot").classList.remove("ok");
+    if (String(err.code) === "permission-denied") {
+      alert("コメントを読み取れません。Firestore のセキュリティルールを確認してください。");
+    }
+  }));
+
+  // 一時停止フラグ（管理画面から切り替わる）
+  unsub.push(fs.onSnapshot(fs.doc(db, "events", eventId), (d) => {
+    paused = d.exists() && d.data().paused === true;
+    $("paused").classList.toggle("on", paused);
+    applyCommentState();
+  }));
+}
+
+// 実際に流すかどうか。全体停止が手元のスイッチより優先される。
+function commentsVisible() { return manualOn && !paused; }
+
+function applyCommentState() {
+  const on = commentsVisible();
+  $("togglecm").textContent = on ? "💬 ON" : "💬 OFF";
+  if (!on) { $("layer").innerHTML = ""; onScreen = 0; lanesFreeAt.fill(0); }
+}
+
+function push(text, type) {
+  if (!commentsVisible() || !text) return;
+  if (onScreen >= MAX_ON_SCREEN) return;      // あふれた分は捨てる（溜めない）
+
+  const el = document.createElement("div");
+  el.className = "cm" + (type === "stamp" ? " stamp" : "");
+  el.textContent = text;
+  el.style.top = "-999px";
+  $("layer").appendChild(el);
+
+  // 空いている行を探す。全部埋まっていれば捨てる
+  const now = performance.now();
+  let lane = -1, earliest = Infinity;
+  for (let i = 0; i < LANES; i++) {
+    if (lanesFreeAt[i] <= now) { lane = i; break; }
+    if (lanesFreeAt[i] < earliest) { earliest = lanesFreeAt[i]; }
+  }
+  if (lane === -1) { el.remove(); return; }
+
+  const laneH = window.innerHeight / LANES;
+  el.style.top = Math.round(lane * laneH + laneH * 0.12) + "px";
+
+  const w = el.offsetWidth;
+  const dist = window.innerWidth + w;
+  const dur  = FLOW_SEC * 1000;
+
+  // 次のコメントがこの行に入れるようになる時刻（文字が完全に出きるまで待つ）
+  lanesFreeAt[lane] = now + dur * (w + window.innerWidth * 0.06) / dist;
+
+  onScreen++;
+  el.animate(
+    [{ transform: "translateX(0)" }, { transform: `translateX(-${dist}px)` }],
+    { duration: dur, easing: "linear" }
+  ).onfinish = () => { el.remove(); onScreen--; };
+}
+
+// テスト用のダミーコメント
+function demoBurst() {
+  const samples = ["わかりやすい","なるほど","👏","それ気になってた","🔥","質問です",
+                   "テスト表示中です","😂","いいね","❤️","参考になります","👍"];
+  samples.forEach((s, i) =>
+    setTimeout(() => push(s, s.length <= 2 ? "stamp" : "comment"), i * 320));
+}
+
+// ===========================================================================
+//  操作
+// ===========================================================================
+document.addEventListener("keydown", (e) => {
+  if ($("setup").style.display !== "none") return;   // 開始前は無視
+  switch (e.key) {
+    case "ArrowRight": case "ArrowDown": case " ": case "PageDown":
+      e.preventDefault(); go(1); break;
+    case "ArrowLeft": case "ArrowUp": case "PageUp":
+      e.preventDefault(); go(-1); break;
+    case "f": case "F": goFullscreen(); break;
+    case "c": case "C": toggleComments(); break;
+    case "d": case "D": demoBurst(); break;
+    case "Home": pageNo = 1; renderPage(1); break;
+    case "End":  pageNo = pdfDoc.numPages; renderPage(pageNo); break;
+  }
+});
+
+$("next").addEventListener("click", () => go(1));
+$("prev").addEventListener("click", () => go(-1));
+$("fs").addEventListener("click", goFullscreen);
+$("togglecm").addEventListener("click", toggleComments);
+// 誤って押すと PDF を読み込み直すことになるため、必ず確認する
+$("quit").addEventListener("click", () => {
+  if (confirm("発表を終了して最初の画面に戻ります。PDF は読み込み直しになります。よろしいですか。"))
+    location.reload();
+});
+
+function toggleComments() {
+  if (paused) return;          // 全体停止中は手元のスイッチで戻せない
+  manualOn = !manualOn;
+  applyCommentState();
+}
+
+async function goFullscreen() {
+  try {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    else await document.exitFullscreen();
+  } catch (e) { console.warn("全画面に切り替えられません:", e); }
+}
+
+// マウスを動かしたときだけ操作バーを出し、止まったらカーソルごと隠す
+let hideTimer;
+function showBar() {
+  $("bar").classList.add("show");
+  document.body.classList.remove("hidecursor");
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => {
+    $("bar").classList.remove("show");
+    document.body.classList.add("hidecursor");
+  }, 2500);
+}
+document.addEventListener("mousemove", showBar);
+
+// 画面が消灯しないようにする
+async function keepAwake() {
+  try {
+    if (!("wakeLock" in navigator)) return;
+    let lock = await navigator.wakeLock.request("screen");
+    document.addEventListener("visibilitychange", async () => {
+      if (document.visibilityState === "visible") {
+        try { lock = await navigator.wakeLock.request("screen"); } catch {}
+      }
+    });
+  } catch (e) { console.warn("画面の消灯防止を設定できません:", e); }
+}
+</script>
+</body>
+</html>

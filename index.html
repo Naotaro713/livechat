@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#12141a">
+<title>コメントを送る</title>
+<style>
+  :root{
+    --bg:#12141a; --panel:#1c1f27; --panel2:#242833; --ink:#eef0f4; --muted:#8d94a3;
+    --line:#313644; --accent:#e97132; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       display:flex;flex-direction:column;align-items:center;
+       padding:env(safe-area-inset-top) 16px calc(16px + env(safe-area-inset-bottom))}
+  .wrap{width:100%;max-width:460px;display:flex;flex-direction:column;gap:16px;padding:20px 0}
+
+  header{text-align:center}
+  header h1{font-size:1.05rem;margin:0 0 4px;font-weight:700}
+  header p{margin:0;color:var(--muted);font-size:.8rem;line-height:1.5}
+
+  .banner{border-radius:10px;padding:10px 13px;font-size:.78rem;line-height:1.6;display:none;
+          white-space:pre-wrap;word-break:break-word}
+  .banner.show{display:block}
+  .banner.warn{background:#3a2a12;border:1px solid #6b4a1c;color:#f0c68a}
+  .banner.err {background:#3a1616;border:1px solid #7a2626;color:#f5a3a3}
+  .banner b{color:#fff}
+
+  .stamps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .stamp{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+         font-size:2rem;padding:14px 0;cursor:pointer;transition:transform .09s,background .15s;
+         line-height:1;color:inherit}
+  .stamp:active{transform:scale(.9);background:var(--panel2)}
+  .stamp:disabled{opacity:.35}
+
+  .field{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px}
+  textarea{width:100%;background:transparent;border:0;color:var(--ink);resize:none;
+           font-size:1rem;line-height:1.55;font-family:inherit;outline:none;min-height:74px}
+  textarea::placeholder{color:#5c6373}
+  .field .foot{display:flex;justify-content:space-between;align-items:center;
+               margin-top:6px;color:var(--muted);font-size:.75rem}
+  .count.over{color:var(--warn)}
+
+  button.send{width:100%;background:var(--accent);color:#fff;border:0;border-radius:14px;
+              padding:15px;font-size:1rem;font-weight:700;font-family:inherit;
+              cursor:pointer;transition:opacity .15s,transform .09s}
+  button.send:active{transform:scale(.98)}
+  button.send:disabled{opacity:.35;cursor:default}
+
+  .status{text-align:center;color:var(--muted);font-size:.78rem;min-height:1.4em;line-height:1.4}
+  .status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.err{color:var(--err)}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);
+         background:var(--ok);color:#06240f;font-weight:700;font-size:.9rem;
+         padding:11px 22px;border-radius:999px;opacity:0;pointer-events:none;
+         transition:opacity .2s,transform .2s;z-index:10}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  footer{color:#4d5464;font-size:.7rem;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1 id="title">トークイベント</h1>
+    <p>スタンプはタップで即送信。<br>コメントは100文字まで、匿名で送れます。</p>
+  </header>
+
+  <!-- 不具合の内容を画面に出す欄。開発者ツールを開かなくても原因が分かるようにしています -->
+  <div class="banner" id="banner"></div>
+
+  <div class="stamps" id="stamps"></div>
+
+  <div class="field">
+    <textarea id="text" maxlength="140" placeholder="コメントを入力…" enterkeyhint="send"></textarea>
+    <div class="foot">
+      <span>Enter で送信されます</span>
+      <span class="count" id="count">0 / 100</span>
+    </div>
+  </div>
+
+  <button class="send" id="send" disabled>送信する</button>
+
+  <div class="status" id="status"></div>
+
+  <footer><span id="sent">0</span> 件送信しました</footer>
+</div>
+
+<div class="toast" id="toast">送信しました</div>
+
+
+<!-- ===================================================================
+     自己診断スクリプト（通常の script。モジュールが動かなくても実行される）
+     下のモジュールが起動しなかった場合に、その事実を画面へ表示します。
+     =================================================================== -->
+<script>
+  window.__appReady = false;
+
+  function showBanner(msg, kind) {
+    var el = document.getElementById("banner");
+    el.innerHTML = msg;
+    el.className = "banner show " + (kind || "warn");
+  }
+  window.showBanner = showBanner;
+
+  // スクリプト読み込みエラーを拾う
+  window.addEventListener("error", function (e) {
+    if (window.__appReady) return;
+    showBanner("<b>読み込みに失敗しました</b>\n" + (e.message || e.type), "err");
+  }, true);
+
+  // 3秒経ってもアプリが起動していなければ、原因の候補を出す
+  setTimeout(function () {
+    if (window.__appReady) return;
+    var isFile = location.protocol === "file:";
+    showBanner(
+      "<b>アプリが起動していません</b>\n" +
+      (isFile
+        ? "ファイルを直接開いた（file://）ため、ブラウザの制限で読み込みが止まっています。\n" +
+          "このフォルダで次のコマンドを実行し、http://localhost:8000 を開いてください。\n" +
+          "　python3 -m http.server 8000"
+        : "ネットワークから Firebase の読み込みができていない可能性があります。\n" +
+          "通信環境を確認して再読み込みしてください。"),
+      "err"
+    );
+  }, 3000);
+</script>
+
+
+<script type="module">
+// ===========================================================================
+//  設定 —— ここだけ書き換えれば動作が変わります
+// ===========================================================================
+
+// Firebase の設定（Firebase コンソール → プロジェクトの設定 → マイアプリ）
+const firebaseConfig = {
+  apiKey:            "AIzaSyAsIx7fO1mifb2kcC4sjzMCYZGWqx4FgpE",
+  authDomain:        "live-chat-1eebe.firebaseapp.com",
+  projectId:         "live-chat-1eebe",
+  storageBucket:     "live-chat-1eebe.firebasestorage.app",
+  messagingSenderId: "714980546124",
+  appId:             "1:714980546124:web:945bdb85d3ed0fb29b06e9",
+};
+
+const EVENT_TITLE     = "トークイベント";              // ヘッダーに出す名前
+const DEFAULT_EVENT_ID = "event-2026";                 // イベントID（?e=xxx で上書き可）
+const STAMPS      = ["👏", "😂", "❤️", "🤔", "🔥", "👍"];
+const MAX_LENGTH  = 100;                               // firestore.rules と同じ値にすること
+const COOLDOWN_MS = 3000;                              // 連投制限
+const NG_WORDS    = ["死ね", "殺す", "きもい", "ブス", "バカ", "アホ", "http://", "https://"];
+
+// ===========================================================================
+//  以下は処理本体
+// ===========================================================================
+const SDK = "https://www.gstatic.com/firebasejs/12.17.0";
+const $ = (id) => document.getElementById(id);
+
+const eventId = (new URLSearchParams(location.search).get("e") || DEFAULT_EVENT_ID).trim();
+let db = null, fs = null, lastSentAt = 0, sentCount = 0;
+
+// ---- 画面の組み立て（Firebase より先に済ませ、通信が失敗しても操作できるようにする）----
+$("title").textContent = EVENT_TITLE;
+$("count").textContent = `0 / ${MAX_LENGTH}`;
+
+STAMPS.forEach((s) => {
+  const b = document.createElement("button");
+  b.className = "stamp";
+  b.type = "button";
+  b.textContent = s;
+  b.setAttribute("aria-label", `スタンプ ${s} を送る`);
+  b.addEventListener("click", () => submit(s, "stamp"));
+  $("stamps").appendChild(b);
+});
+
+const ta = $("text");
+ta.addEventListener("input", () => {
+  const len = [...ta.value.trim()].length;
+  $("count").textContent = `${len} / ${MAX_LENGTH}`;
+  $("count").classList.toggle("over", len > MAX_LENGTH);
+  $("send").disabled = len === 0 || len > MAX_LENGTH;
+});
+ta.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); if (!$("send").disabled) submit(ta.value, "comment"); }
+});
+$("send").addEventListener("click", () => submit(ta.value, "comment"));
+
+// ここまで来ればUIは動く。診断スクリプトの警告を止める。
+window.__appReady = true;
+
+// ---- Firebase 接続 ----
+try {
+  const { initializeApp } = await import(`${SDK}/firebase-app.js`);
+  fs = await import(`${SDK}/firebase-firestore.js`);
+  db = fs.getFirestore(initializeApp(firebaseConfig));
+  setStatus("接続しました", "ok");
+  setTimeout(() => setStatus("", ""), 1500);
+} catch (e) {
+  console.error(e);
+  window.showBanner(
+    "<b>Firebase に接続できませんでした</b>\n" + e.message +
+    "\n設定値（apiKey など）が正しいか確認してください。", "err");
+}
+
+// ---- 送信 ----
+async function submit(rawText, type) {
+  const text = String(rawText).replace(/\s+/g, " ").trim();
+  if (!text) return;
+  if ([...text].length > MAX_LENGTH) { setStatus(`${MAX_LENGTH}文字までです`, "warn"); return; }
+
+  if (!db) { setStatus("接続されていないため送信できません", "err"); return; }
+
+  const wait = COOLDOWN_MS - (Date.now() - lastSentAt);
+  if (wait > 0) { setStatus(`あと ${Math.ceil(wait / 1000)} 秒お待ちください`, "warn"); return; }
+  lastSentAt = Date.now();
+  lockButtons(true);
+
+  const hidden = NG_WORDS.some((w) => text.toLowerCase().includes(w.toLowerCase()));
+
+  try {
+    await fs.addDoc(fs.collection(db, "events", eventId, "comments"), {
+      text, type, hidden, createdAt: fs.serverTimestamp(),
+    });
+
+    if (type === "comment") { ta.value = ""; ta.dispatchEvent(new Event("input")); }
+    sentCount++; $("sent").textContent = sentCount;
+    toast(hidden ? "送信しました（確認中）" : "送信しました");
+    setStatus("", "");
+  } catch (e) {
+    console.error(e);
+    lastSentAt = 0;
+    if (String(e.code) === "permission-denied") {
+      setStatus("送信を拒否されました。セキュリティルールを確認してください。", "err");
+    } else {
+      setStatus("送信できませんでした。電波を確認してもう一度お試しください。", "err");
+    }
+  } finally {
+    setTimeout(() => lockButtons(false), COOLDOWN_MS);
+  }
+}
+
+// ---- UI ヘルパー ----
+function lockButtons(disabled) {
+  document.querySelectorAll(".stamp").forEach((b) => (b.disabled = disabled));
+  const len = [...ta.value.trim()].length;
+  $("send").disabled = disabled || len === 0 || len > MAX_LENGTH;
+}
+function setStatus(msg, kind) {
+  const el = $("status");
+  el.textContent = msg;
+  el.className = "status" + (kind ? " " + kind : "");
+}
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._id);
+  toast._id = setTimeout(() => t.classList.remove("show"), 1400);
+}
+</script>
+</body>
+</html>

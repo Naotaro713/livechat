@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#12141a">
+<title>管理画面｜コメント</title>
+<style>
+  :root{
+    --bg:#12141a; --panel:#1c1f27; --panel2:#242833; --ink:#eef0f4; --muted:#8d94a3;
+    --line:#313644; --accent:#e97132; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       padding:env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom))}
+  .wrap{width:100%;max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding:20px 0}
+
+  h1{font-size:1.05rem;margin:0;font-weight:700}
+  .sub{color:var(--muted);font-size:.78rem;line-height:1.55;margin:4px 0 0}
+
+  .banner{border-radius:10px;padding:10px 13px;font-size:.78rem;line-height:1.6;display:none;
+          white-space:pre-wrap;word-break:break-word}
+  .banner.show{display:block}
+  .banner.warn{background:#3a2a12;border:1px solid #6b4a1c;color:#f0c68a}
+  .banner.err {background:#3a1616;border:1px solid #7a2626;color:#f5a3a3}
+  .banner b{color:#fff}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .card h2{font-size:.85rem;margin:0 0 10px;font-weight:700;color:var(--muted)}
+
+  label{display:block;font-size:.75rem;color:var(--muted);margin:0 0 4px}
+  input[type=text],input[type=email],input[type=password]{
+    width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);padding:10px 12px;font-size:.95rem;font-family:inherit;outline:none}
+  input:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row > *{flex:1 1 180px}
+
+  button{border:0;border-radius:10px;padding:11px 14px;font-size:.9rem;font-weight:700;
+         font-family:inherit;cursor:pointer;transition:opacity .15s,transform .08s}
+  button:active{transform:scale(.98)}
+  button:disabled{opacity:.35;cursor:default}
+  .primary{background:var(--accent);color:#fff}
+  .ghost{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+  .danger{background:#3a1616;color:#f5a3a3;border:1px solid #7a2626}
+  .stop{background:var(--err);color:#fff}
+  .resume{background:var(--ok);color:#06240f}
+
+  .tabs{display:flex;gap:8px}
+  .tab{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--muted);
+       border-radius:10px;padding:10px;font-size:.85rem;font-weight:700}
+  .tab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .tab .n{opacity:.75;font-weight:400}
+
+  ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  li{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+     padding:11px 13px;display:flex;gap:10px;align-items:flex-start}
+  li.hid{border-color:#6b4a1c;background:#221b12}
+  .body{flex:1;min-width:0}
+  .txt{font-size:.95rem;line-height:1.5;word-break:break-word;white-space:pre-wrap}
+  .txt.stamp{font-size:1.6rem;line-height:1.2}
+  .meta{color:var(--muted);font-size:.7rem;margin-top:4px;display:flex;gap:8px;flex-wrap:wrap}
+  .tag{border:1px solid var(--line);border-radius:999px;padding:1px 7px}
+  .tag.ng{border-color:#7a2626;color:#f5a3a3}
+  .acts{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+  .acts button{padding:7px 10px;font-size:.75rem;border-radius:8px}
+
+  .empty{color:var(--muted);font-size:.8rem;text-align:center;padding:26px 0}
+  .status{color:var(--muted);font-size:.78rem;min-height:1.3em}
+  .status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.err{color:var(--err)}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div>
+    <h1>管理画面</h1>
+    <p class="sub">保留コメントの確認・削除・全体停止を行います。ログインが必要です。</p>
+  </div>
+
+  <div class="banner" id="banner"></div>
+
+  <!-- ログイン -->
+  <div class="card" id="loginCard">
+    <h2>ログイン</h2>
+    <div class="row">
+      <div>
+        <label for="email">メールアドレス</label>
+        <input type="email" id="email" autocomplete="username" placeholder="you@example.com">
+      </div>
+      <div>
+        <label for="pw">パスワード</label>
+        <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••">
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="login">ログイン</button>
+    </div>
+    <div class="status" id="loginStatus" style="margin-top:8px"></div>
+  </div>
+
+  <!-- 管理本体 -->
+  <div id="panel" class="hide" style="display:flex;flex-direction:column;gap:14px">
+
+    <div class="card">
+      <h2>イベント</h2>
+      <div class="row">
+        <div>
+          <label for="eid">イベントID</label>
+          <input type="text" id="eid" value="event-2026">
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="ghost" id="switch" style="width:100%">切り替え</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="stop" id="pause">コメントを全体停止</button>
+        <button class="ghost" id="logout" style="flex:0 0 auto">ログアウト</button>
+      </div>
+      <div class="status" id="status" style="margin-top:8px"></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab on" data-f="pending">保留 <span class="n" id="nPending">0</span></button>
+      <button class="tab"    data-f="live">表示中 <span class="n" id="nLive">0</span></button>
+      <button class="tab"    data-f="all">すべて <span class="n" id="nAll">0</span></button>
+    </div>
+
+    <ul id="list"></ul>
+    <div class="empty" id="empty">読み込み中…</div>
+  </div>
+
+</div>
+
+
+<!-- 自己診断（通常script）。モジュールが起動しなければ原因を画面に出す -->
+<script>
+  window.__appReady = false;
+  function showBanner(msg, kind){
+    var el = document.getElementById("banner");
+    el.innerHTML = msg;
+    el.className = "banner show " + (kind || "warn");
+  }
+  window.showBanner = showBanner;
+  window.addEventListener("error", function(e){
+    if (window.__appReady) return;
+    showBanner("<b>読み込みに失敗しました</b>\n" + (e.message || e.type), "err");
+  }, true);
+  setTimeout(function(){
+    if (window.__appReady) return;
+    var isFile = location.protocol === "file:";
+    showBanner(
+      "<b>画面が起動していません</b>\n" +
+      (isFile
+        ? "ファイルを直接開いた（file://）ため、ブラウザの制限で止まっている可能性があります。\n" +
+          "このフォルダで次を実行し、http://localhost:8000/admin.html を開いてください。\n" +
+          "　python3 -m http.server 8000"
+        : "ネットワークから Firebase の読み込みができていない可能性があります。"),
+      "err");
+  }, 4000);
+</script>
+
+
+<script type="module">
+// ===========================================================================
+//  設定 —— index.html / present.html と同じ Firebase プロジェクト
+// ===========================================================================
+const firebaseConfig = {
+  apiKey:            "AIzaSyAsIx7fO1mifb2kcC4sjzMCYZGWqx4FgpE",
+  authDomain:        "live-chat-1eebe.firebaseapp.com",
+  projectId:         "live-chat-1eebe",
+  storageBucket:     "live-chat-1eebe.firebasestorage.app",
+  messagingSenderId: "714980546124",
+  appId:             "1:714980546124:web:945bdb85d3ed0fb29b06e9",
+};
+
+const DEFAULT_EVENT_ID = "event-2026";
+const FETCH_LIMIT = 200;   // 直近何件を管理対象にするか
+const SDK = "https://www.gstatic.com/firebasejs/12.17.0";
+
+// ===========================================================================
+const $ = (id) => document.getElementById(id);
+
+let db = null, fs = null, auth = null, authLib = null;
+let eventId = (new URLSearchParams(location.search).get("e") || DEFAULT_EVENT_ID).trim();
+let filter = "pending";
+let docs = [];               // 直近の全コメント
+let unsubComments = null, unsubEvent = null;
+let paused = false;
+
+$("eid").value = eventId;
+
+// ---- タブ切り替え（Firebase を待たずに動く）----
+document.querySelectorAll(".tab").forEach((b) => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    filter = b.dataset.f;
+    render();
+  });
+});
+
+window.__appReady = true;
+
+// ---- Firebase 読み込み ----
+try {
+  const { initializeApp } = await import(`${SDK}/firebase-app.js`);
+  fs      = await import(`${SDK}/firebase-firestore.js`);
+  authLib = await import(`${SDK}/firebase-auth.js`);
+  const app = initializeApp(firebaseConfig);
+  db   = fs.getFirestore(app);
+  auth = authLib.getAuth(app);
+
+  authLib.onAuthStateChanged(auth, (user) => {
+    if (user) {
+      $("loginCard").classList.add("hide");
+      $("panel").classList.remove("hide");
+      subscribe();
+    } else {
+      $("loginCard").classList.remove("hide");
+      $("panel").classList.add("hide");
+      unsubscribe();
+    }
+  });
+} catch (e) {
+  console.error(e);
+  window.showBanner("<b>Firebase に接続できませんでした</b>\n" + e.message, "err");
+}
+
+// ---- ログイン ----
+$("login").addEventListener("click", doLogin);
+$("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+
+async function doLogin() {
+  const email = $("email").value.trim();
+  const pw    = $("pw").value;
+  if (!email || !pw) { setLoginStatus("メールアドレスとパスワードを入力してください", "warn"); return; }
+  if (!auth) { setLoginStatus("Firebase に接続されていません", "err"); return; }
+
+  setLoginStatus("ログインしています…", "");
+  $("login").disabled = true;
+  try {
+    await authLib.signInWithEmailAndPassword(auth, email, pw);
+    setLoginStatus("", "");
+    $("pw").value = "";
+  } catch (e) {
+    console.error(e);
+    const c = String(e.code || "");
+    let msg = "ログインできませんでした（" + c + "）";
+    if (c.includes("invalid-credential") || c.includes("wrong-password") || c.includes("user-not-found"))
+      msg = "メールアドレスまたはパスワードが違います";
+    else if (c.includes("operation-not-allowed"))
+      msg = "メール／パスワードのログインが有効になっていません。Firebase コンソールの Authentication で有効にしてください";
+    else if (c.includes("network"))
+      msg = "通信に失敗しました。接続を確認してください";
+    setLoginStatus(msg, "err");
+  } finally {
+    $("login").disabled = false;
+  }
+}
+
+$("logout").addEventListener("click", () => authLib.signOut(auth));
+
+// ---- イベント切り替え ----
+$("switch").addEventListener("click", () => {
+  const v = $("eid").value.trim();
+  if (!v) return;
+  eventId = v;
+  subscribe();
+  setStatus(`イベント「${eventId}」を表示しています`, "ok");
+});
+
+// ---- 購読 ----
+function unsubscribe() {
+  if (unsubComments) { unsubComments(); unsubComments = null; }
+  if (unsubEvent)    { unsubEvent();    unsubEvent = null; }
+}
+
+function subscribe() {
+  unsubscribe();
+  docs = [];
+  $("empty").textContent = "読み込み中…";
+  render();
+
+  // 複合索引を避けるため、単一フィールドの並べ替えのみ。絞り込みは画面側で行う。
+  const q = fs.query(
+    fs.collection(db, "events", eventId, "comments"),
+    fs.orderBy("createdAt", "desc"),
+    fs.limit(FETCH_LIMIT)
+  );
+  unsubComments = fs.onSnapshot(q, (snap) => {
+    docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    render();
+  }, (err) => {
+    console.error(err);
+    setStatus(String(err.code) === "permission-denied"
+      ? "読み取りを拒否されました。セキュリティルールを確認してください。"
+      : "コメントを取得できませんでした（" + err.code + "）", "err");
+  });
+
+  unsubEvent = fs.onSnapshot(fs.doc(db, "events", eventId), (d) => {
+    paused = d.exists() && d.data().paused === true;
+    const b = $("pause");
+    b.textContent = paused ? "停止を解除する" : "コメントを全体停止";
+    b.className   = paused ? "resume" : "stop";
+  }, (e) => console.error(e));
+}
+
+// ---- 全体停止 ----
+$("pause").addEventListener("click", async () => {
+  const next = !paused;
+  if (next && !confirm("発表画面へのコメント表示を停止します。よろしいですか。")) return;
+  $("pause").disabled = true;
+  try {
+    await fs.setDoc(fs.doc(db, "events", eventId), { paused: next }, { merge: true });
+    setStatus(next ? "コメント表示を停止しました" : "コメント表示を再開しました", next ? "warn" : "ok");
+  } catch (e) {
+    console.error(e);
+    setStatus("変更できませんでした（" + e.code + "）", "err");
+  } finally {
+    $("pause").disabled = false;
+  }
+});
+
+// ---- 一覧の描画 ----
+function render() {
+  const pending = docs.filter((d) => d.hidden === true);
+  const live    = docs.filter((d) => d.hidden !== true);
+  $("nPending").textContent = pending.length;
+  $("nLive").textContent    = live.length;
+  $("nAll").textContent     = docs.length;
+
+  const items = filter === "pending" ? pending : filter === "live" ? live : docs;
+
+  const ul = $("list");
+  ul.innerHTML = "";
+  if (!items.length) {
+    $("empty").textContent =
+      filter === "pending" ? "保留中のコメントはありません" : "コメントはまだありません";
+    $("empty").style.display = "";
+    return;
+  }
+  $("empty").style.display = "none";
+
+  items.forEach((d) => {
+    const li = document.createElement("li");
+    if (d.hidden) li.className = "hid";
+
+    const body = document.createElement("div");
+    body.className = "body";
+
+    const txt = document.createElement("div");
+    txt.className = "txt" + (d.type === "stamp" ? " stamp" : "");
+    txt.textContent = d.text ?? "";
+    body.appendChild(txt);
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.appendChild(tag(d.type === "stamp" ? "スタンプ" : "コメント"));
+    if (d.hidden) meta.appendChild(tag("保留", true));
+    const t = d.createdAt?.toDate?.();
+    const time = document.createElement("span");
+    time.textContent = t ? t.toLocaleTimeString("ja-JP") : "送信中…";
+    meta.appendChild(time);
+    body.appendChild(meta);
+
+    const acts = document.createElement("div");
+    acts.className = "acts";
+
+    const toggle = document.createElement("button");
+    toggle.className = d.hidden ? "ghost" : "ghost";
+    toggle.textContent = d.hidden ? "表示する" : "隠す";
+    toggle.addEventListener("click", () => setHidden(d.id, !d.hidden));
+    acts.appendChild(toggle);
+
+    const del = document.createElement("button");
+    del.className = "danger";
+    del.textContent = "削除";
+    del.addEventListener("click", () => remove(d.id, d.text));
+    acts.appendChild(del);
+
+    li.appendChild(body);
+    li.appendChild(acts);
+    ul.appendChild(li);
+  });
+}
+
+function tag(label, ng) {
+  const s = document.createElement("span");
+  s.className = "tag" + (ng ? " ng" : "");
+  s.textContent = label;
+  return s;
+}
+
+// ---- 個別操作 ----
+async function setHidden(id, hidden) {
+  try {
+    await fs.updateDoc(fs.doc(db, "events", eventId, "comments", id), { hidden });
+    setStatus(hidden ? "保留にしました" : "表示に戻しました（発表画面には今後の分から流れます）", "ok");
+  } catch (e) {
+    console.error(e);
+    setStatus("変更できませんでした（" + e.code + "）", "err");
+  }
+}
+
+async function remove(id, text) {
+  if (!confirm(`削除します。よろしいですか。\n\n${text}`)) return;
+  try {
+    await fs.deleteDoc(fs.doc(db, "events", eventId, "comments", id));
+    setStatus("削除しました", "ok");
+  } catch (e) {
+    console.error(e);
+    setStatus("削除できませんでした（" + e.code + "）", "err");
+  }
+}
+
+// ---- ヘルパー ----
+function setStatus(msg, kind) {
+  const el = $("status");
+  el.textContent = msg;
+  el.className = "status" + (kind ? " " + kind : "");
+}
+function setLoginStatus(msg, kind) {
+  const el = $("loginStatus");
+  el.textContent = msg;
+  el.className = "status" + (kind ? " " + kind : "");
+}
+</script>
+</body>
+</html>
