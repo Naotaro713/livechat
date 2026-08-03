@@ -8,15 +8,20 @@
 
 <img src="qr_readme.png" width="200" alt="投稿ページのQRコード">
 
-https://naotaro713.github.io/livechat/
+**→ [投稿ページを開く](https://naotaro713.github.io/livechat/)**
 
 ## 画面の構成
 
-| ファイル | 役割 | 使う人 |
+| 画面 | 役割 | 使う人 |
 | --- | --- | --- |
-| `index.html` | コメント・スタンプの投稿とアンケートへの回答 | 観客 |
-| `present.html` | PDFスライドの表示、弾幕、アンケートの集計 | 登壇者 |
-| `admin.html` | 保留コメントの確認・削除、全体停止、アンケートの作成 | 運営 |
+| [投稿ページ](https://naotaro713.github.io/livechat/) （`index.html`） | コメント・スタンプの投稿とアンケートへの回答 | 観客 |
+| [発表画面](https://naotaro713.github.io/livechat/present.html) （`present.html`） | PDFスライドの表示、弾幕、アンケートの集計 | 登壇者 |
+| [管理画面](https://naotaro713.github.io/livechat/admin.html) （`admin.html`） | 保留コメントの確認・削除、全体停止、アンケートの作成 | 運営 |
+
+管理画面はログインが必要です。発表画面と管理画面のURLは観客には配らず、QRコードで案内するのは投稿ページだけにしてください。
+
+イベントを分けたいときは、URL の末尾に `?e=イベントID` を付けると別のイベントとして動きます。
+例: `https://naotaro713.github.io/livechat/?e=talk-0901`
 
 `present.html` は PowerPoint を PDF で書き出したファイルを読み込みます。
 PDF はブラウザの中だけで処理され、どこにも送信されません。
